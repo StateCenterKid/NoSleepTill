@@ -1,3 +1,4 @@
+#Show travel time to common cities. Dan Goodman, August 2026
 library(shiny)
 library(ggplot2)
 library(dplyr)
@@ -52,16 +53,28 @@ ui <- fluidPage(
         selected = "Brooklyn"
       ),
       hr(),
-      p("How much sleep are you going to lose until you reach the nearest ___?"),
+      p("How much sleep will you lose until the nearest ___?"),
       hr(),
       h4(textOutput("clickResult"), style = "color: #1DB954; font-weight: bold;"),
       hr(),
+      tags$small(
+        tags$span("Inspired by 40 years of Beastie Boys in my internal soundtrack", style = "color: #888888; font-style: italic;"), 
       br(),
-      tags$small("City data sourced from ", 
-                 tags$a(href="https://github.com/kelvins/US-Cities-Database", 
-                        "kelvins/US-Cities-Database", 
-                        target="_blank", 
-                        style="color: #1DB954; text-decoration: none; font-weight: bold;"))
+        "City data sourced from ", 
+        tags$a(href="https://github.com/kelvins/US-Cities-Database", 
+               "kelvins/US-Cities-Database", 
+               target="_blank", 
+               style="color: #1DB954; text-decoration: none; font-weight: bold;")),
+      hr(), 
+      tags$div(
+        style = "text-align: center; margin-top: 20px;",
+        tags$a(
+          href = "https://github.com/StateCenterKid/NoSleepTill", 
+          target = "_blank", # Opens in a new tab
+          style = "color: #121212; background-color: #1DB954; padding: 10px 15px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block;",
+          icon("github"), " View Source Code"
+        )
+      )
     ),
     
     mainPanel(
@@ -76,6 +89,14 @@ ui <- fluidPage(
 # ==========================================
 server <- function(input, output) {
   
+  # 1. THE MEMORY BOX: Store the text we want to display
+  display_text <- reactiveVal("Click a point")
+  
+  # 2. THE RESET TRIGGER: If they pick a new city, reset the text
+  observeEvent(input$cityName, {
+    display_text("Click a point")
+  })
+  
   target_cities <- reactive({
     all_cities %>% filter(clean_name == input$cityName)
   })
@@ -89,12 +110,10 @@ server <- function(input, output) {
       return(ggplot() + theme_void() + ggtitle("City coordinates not found."))
     }
     
-    # Run target dots through our Albers projection so they align with the map
     proj_targets <- apply_albers(targets$long, targets$lat)
     targets$x_proj <- proj_targets$x
     targets$y_proj <- proj_targets$y
     
-    # Distance is still calculated using TRUE long/lat for accuracy
     county_centroids$min_dist_miles <- sapply(1:nrow(county_centroids), function(i) {
       distances <- distHaversine(
         p1 = c(county_centroids$cent_long[i], county_centroids$cent_lat[i]),
@@ -106,7 +125,6 @@ server <- function(input, output) {
     county_centroids$hours <- county_centroids$min_dist_miles / 50
     map_data_merged <- left_join(counties, county_centroids, by = c("region", "subregion"))
     
-    # Plot using our pre-calculated x_proj and y_proj
     ggplot(map_data_merged, aes(x = x_proj, y = y_proj, group = group, fill = hours)) +
       geom_polygon(color = NA) +
       geom_point(
@@ -116,7 +134,7 @@ server <- function(input, output) {
         size = 2, 
         inherit.aes = FALSE
       ) +
-      coord_fixed() + # Keeps the Albers curve perfectly scaled
+      coord_fixed() + 
       scale_fill_gradientn(
         colors = c("#00FF00", "#0000FF", "#8B0000"), 
         name = paste("Hours from a", target_name)
@@ -135,33 +153,26 @@ server <- function(input, output) {
       ggtitle(paste("Sleep Deprivation Until", target_name))
   }, bg = "transparent")
   
-  # Render the Click Output
-
-  output$clickResult <- renderText({
-    
-    # 1. Check if a click has happened yet
-    if (is.null(input$map_click)) {
-      return("Click a point")
-    } 
+  # 3. THE CLICK TRIGGER: Calculate distance and save it to the memory box
+  observeEvent(input$map_click, {
+    # req() ensures we safely ignore any random NULL resets from the browser
+    req(input$map_click) 
     
     targets <- target_cities()
     
-    # 2. Grab the raw click (These are now in EPSG: 5070 Meters!)
     click_raw_x <- input$map_click$x
     click_raw_y <- input$map_click$y
     
-    # 3. Reverse-engineer the projection to get True Lon/Lat
     true_coords <- apply_albers(click_raw_x, click_raw_y, reverse = TRUE)
     
     click_lon <- true_coords$x
     click_lat <- true_coords$y
     
-    # Fail-safe just in case the click goes wildly off the grid
     if(is.na(click_lon) || is.na(click_lat) || click_lon > 180 || click_lon < -180 || click_lat > 90 || click_lat < -90) {
-      return("Click closer to the map!")
+      display_text("Click closer to the map!")
+      return() # Exit this block early
     }
     
-    # 4. Calculate actual distance normally using true geo-coordinates
     distances <- distHaversine(
       p1 = c(click_lon, click_lat),
       p2 = as.matrix(targets[, c("long", "lat")])
@@ -170,7 +181,13 @@ server <- function(input, output) {
     min_miles <- min(distances) / 1609.344
     hours <- min_miles / 50
     
-    sprintf("That's %.1f hours away!", hours)
+    # Update the memory box with the new calculation!
+    display_text(sprintf("That's %.1f hours away!", hours))
+  })
+  
+  # 4. Render whatever is currently stored in the memory box
+  output$clickResult <- renderText({
+    display_text()
   })
 }
 
