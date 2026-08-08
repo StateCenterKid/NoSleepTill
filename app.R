@@ -53,8 +53,6 @@ ui <- fluidPage(
         selected = "Brooklyn"
       ),
       hr(),
-      p("How much sleep will you lose until the nearest ___?"),
-      hr(),
       h4(textOutput("clickResult"), style = "color: #1DB954; font-weight: bold;"),
       hr(),
       tags$small(

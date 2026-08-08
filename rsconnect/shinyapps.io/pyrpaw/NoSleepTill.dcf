@@ -5,9 +5,9 @@ account: pyrpaw
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 17680457
-bundleId: 12384352
+bundleId: 12384454
 url: https://pyrpaw.shinyapps.io/NoSleepTill/
 version: 1
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: .gitattributes|LICENSE|README.md|src/GetCities.R|src/NoSleepTill.R
+ignoredFiles: .gitattributes|LICENSE|README.md|src/GetCities.R
